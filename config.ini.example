@@ -1425,6 +1425,31 @@ enabled = false
 # Allow private/internal feed URLs (default false for SSRF safety)
 allow_private_urls = false
 
+[AI_Command]
+# Enable the ai command. Requires a running OpenAI-compatible LLM server (Ollama, llama.cpp, etc.)
+enabled = false
+# OpenAI-compatible endpoint
+base_url = http://localhost:11434/v1
+# API key — use any non-empty string for local servers that don't require one
+api_key = local
+# Model name as returned by your LLM server
+model = llama3
+# LLM request timeout in seconds
+timeout = 60
+# Maximum number of turns (user + assistant combined) kept per DM sender
+max_history = 20
+# DM session expiry: seconds of inactivity before history is discarded (default 86400 = 24h)
+expire_after = 86400
+# Message sent immediately while the LLM is processing
+# ack_message = ...
+# Message sent if the LLM fails or times out
+# error_message = AI unavailable, try later.
+# Override the system prompt entirely (single line; use \n for newlines)
+# system_prompt =
+# Restrict to specific channels (leave unset to allow all monitored channels and DMs)
+# channels =
+# aliases = comma-separated extra trigger words, e.g.: aliases = llm, ask
+
 ####################################################################################################
 #                                                                                                  #
 #                                       Web Viewer Configuration                                   #

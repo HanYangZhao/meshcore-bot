@@ -490,6 +490,21 @@ def _m0012_purging_log_details_column(cursor: sqlite3.Cursor) -> None:
         _add_column(cursor, "purging_log", "details", "TEXT")
 
 
+def _m0013_ai_sessions(cursor: sqlite3.Cursor) -> None:
+    """Create ai_sessions table for per-sender LLM conversation history."""
+    cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS ai_sessions (
+            pubkey      TEXT    NOT NULL,
+            role        TEXT    NOT NULL,
+            content     TEXT    NOT NULL,
+            updated_at  INTEGER NOT NULL,
+            turn_order  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_sessions_pubkey_order
+            ON ai_sessions (pubkey, turn_order);
+    """)
+
+
 # ---------------------------------------------------------------------------
 # Migration registry — append new entries here, never remove or reorder.
 # ---------------------------------------------------------------------------
@@ -509,6 +524,7 @@ MIGRATIONS: list[MigrationEntry] = [
     (10, "create repeater/graph tables", _m0010_create_repeater_and_graph_tables),
     (11, "repeater/graph indexes", _m0011_repeater_and_graph_indexes),
     (12, "purging_log: add details column", _m0012_purging_log_details_column),
+    (13, "ai_sessions table for LLM conversation history", _m0013_ai_sessions),
 ]
 
 
