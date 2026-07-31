@@ -84,7 +84,8 @@
       "mqtt_weather_no_subscriber": "MQTT weather subscriber is not active (enable [MqttWeather] and custom.mqtt_weather.* topics)",
       "mqtt_weather_no_data": "No MQTT weather message received for this topic yet",
       "mqtt_weather_stale": "MQTT weather data is too old",
-      "mqtt_weather_payload_error": "MQTT weather payload error: {detail}"
+      "mqtt_weather_payload_error": "MQTT weather payload error: {detail}",
+      "outside_us": "'{location}' is outside the US (NOAA only covers the US). Use 'gwx {location}' for international weather."
     },
     "gwx": {
       "description": "Get weather information for any global location (usage: gwx Tokyo)",

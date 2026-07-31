@@ -273,8 +273,8 @@ class MessageHandler:
                 return False
 
             # Check if message timestamp is before connection time
-            # Allow small buffer (5 seconds) to account for clock differences
-            return msg_time < (self.bot.connection_time - 5)
+            # Allow small buffer (60 seconds) to account for clock differences
+            return msg_time < (self.bot.connection_time - 60)
         except (TypeError, ValueError):
             # If we can't parse timestamp, process the message (safer to process than skip)
             return False

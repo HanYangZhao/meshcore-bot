@@ -91,9 +91,11 @@ class GlobalWxCommand(BaseCommand):
         self.precipitation_unit = self.bot.config.get('Weather', 'precipitation_unit', fallback='inch').lower()
 
         # Validate units
-        if self.temperature_unit not in ['fahrenheit', 'celsius']:
+        if self.temperature_unit not in ['fahrenheit', 'celsius', 'celcius']:
             self.logger.warning(f"Invalid temperature_unit '{self.temperature_unit}', using 'fahrenheit'")
             self.temperature_unit = 'fahrenheit'
+        if self.temperature_unit == 'celcius':
+            self.temperature_unit = 'celsius'  # common typo
         if self.wind_speed_unit not in ['mph', 'kmh', 'ms']:
             self.logger.warning(f"Invalid wind_speed_unit '{self.wind_speed_unit}', using 'mph'")
             self.wind_speed_unit = 'mph'

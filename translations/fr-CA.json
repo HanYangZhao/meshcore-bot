@@ -254,7 +254,8 @@
             "tomorrow_not_available": "Tomorrow's forecast not available",
             "tomorrow_error": "Error formatting tomorrow's forecast",
             "multiday_not_available": "{num_days}-day forecast not available",
-            "multiday_error": "Error formatting {num_days}-day forecast"
+            "multiday_error": "Error formatting {num_days}-day forecast",
+            "outside_us": "'{location}' est hors des États-Unis (NOAA couvre uniquement les États-Unis). Utilisez 'gwx {location}' pour la météo internationale."
         },
         "gwx": {
             "description": "Obtenir les informations météo pour n'importe quel endroit dans le monde (utilisation : gwx Tokyo)",

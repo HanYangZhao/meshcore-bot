@@ -777,6 +777,20 @@ class WxCommand(BaseCommand):
                             address_info = {'city': location_str}
                     else:
                         address_info = {}
+
+                    # NOAA only covers the US — reject non-US coordinates early
+                    country_code = address_info.get('country_code', '').lower()
+                    # Reverse geocode to get country code if not already present
+                    if not country_code:
+                        try:
+                            from ..utils import rate_limited_nominatim_reverse_sync
+                            rev = rate_limited_nominatim_reverse_sync(self.bot, f"{lat}, {lon}", timeout=5)
+                            if rev and hasattr(rev, 'raw'):
+                                country_code = (rev.raw.get('address', {}) or {}).get('country_code', '').lower()
+                        except Exception:
+                            pass
+                    if country_code and country_code != 'us':
+                        return self.translate('commands.wx.outside_us', location=location)
                 except ValueError:
                     return self.translate('commands.wx.error', error=f"Invalid coordinates format: {location}")
             elif location_type == "zipcode":
@@ -795,6 +809,11 @@ class WxCommand(BaseCommand):
                 if lat is None or lon is None:
                     region = self.default_state or self.default_country
                     return self.translate('commands.wx.no_location_city', location=location, state=region)
+
+                # NOAA only covers the US — reject non-US locations early with a helpful hint
+                country_code = (address_info or {}).get('country_code', '').lower()
+                if country_code and country_code != 'us':
+                    return self.translate('commands.wx.outside_us', location=location)
 
                 # Check if the found city is in a different state than default
                 actual_city = location
