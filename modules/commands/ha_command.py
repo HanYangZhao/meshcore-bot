@@ -71,8 +71,32 @@ class HaCommand(BaseCommand):
             line = self._fetch_entity(entity_id)
             lines.append(line)
 
-        await self.send_response(message, "\n".join(lines))
+        chunks = self._pack_into_chunks(lines, self.get_max_message_length(message))
+        if len(chunks) == 1:
+            await self.send_response(message, chunks[0])
+        else:
+            await self.send_response_chunked(message, chunks)
         return True
+
+    def _pack_into_chunks(self, lines: list[str], max_bytes: int) -> list[str]:
+        """Pack lines into as few messages as possible without exceeding max_bytes each."""
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+        for line in lines:
+            line_bytes = len(line.encode("utf-8"))
+            # +1 for the \n separator (except first line in a chunk)
+            needed = line_bytes + (1 if current else 0)
+            if current and current_len + needed > max_bytes:
+                chunks.append("\n".join(current))
+                current = [line]
+                current_len = line_bytes
+            else:
+                current.append(line)
+                current_len += needed
+        if current:
+            chunks.append("\n".join(current))
+        return chunks
 
     def _fetch_entity(self, entity_id: str) -> str:
         """Return a single formatted line for one entity, or an error string."""

@@ -178,10 +178,26 @@ class TestHaCommandSuccessfulFetch:
         ]
         with patch("modules.commands.ha_command.requests.get", side_effect=responses):
             _run(cmd.execute(msg))
+        # Both entities are short enough to fit in one DM chunk
         bot.command_manager.send_response.assert_called_once()
         text = _sent_text(bot)
         assert "Temp: 21.0 °C" in text
         assert "Kitchen: off" in text
+
+    def test_long_response_split_into_multiple_chunks(self):
+        # 10 entities whose lines together exceed 158 bytes
+        entities = ",".join(f"sensor.e{i}" for i in range(10))
+        bot = _make_bot(entities=entities)
+        cmd = HaCommand(bot)
+        msg = mock_message(content="ha get", is_dm=True, sender_pubkey=_ADMIN_KEY)
+        # Each line: "Entity N Name: on" — short, but 10 together will exceed 158 bytes
+        side_effects = [_make_resp("on", friendly=f"Entity {i} Name") for i in range(10)]
+        with patch("modules.commands.ha_command.requests.get", side_effect=side_effects):
+            _run(cmd.execute(msg))
+        bot.command_manager.send_response_chunked.assert_called_once()
+        all_lines = "\n".join(bot.command_manager.send_response_chunked.call_args[0][1])
+        for i in range(10):
+            assert f"Entity {i} Name: on" in all_lines
 
     def test_explicit_entity_id_overrides_configured_list(self):
         bot = _make_bot(entities="sensor.temp, light.kitchen")
