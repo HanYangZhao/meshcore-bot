@@ -29,25 +29,6 @@ _DEFAULT_SYSTEM_PROMPT = (
 
 _SECTION = "AI_Command"
 
-# OpenAI-format schemas for common Open WebUI server-side tools.
-# OWUI matches function names to its registered tool functions and executes them server-side.
-_BUILTIN_TOOL_SCHEMAS: dict[str, dict] = {
-    "web_search": {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the web for current information, news, or real-time data.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "The search query"}
-                },
-                "required": ["query"],
-            },
-        },
-    }
-}
-
 
 def _split_chunks(text: str, max_len: int) -> list[str]:
     """Split text at word boundaries into chunks of at most max_len bytes (UTF-8)."""
@@ -107,7 +88,7 @@ class AiCommand(BaseCommand):
         custom_prompt: Optional[str] = self.get_config_value(_SECTION, "system_prompt", fallback=None)
         self._system_prompt: str = custom_prompt if custom_prompt else _DEFAULT_SYSTEM_PROMPT
 
-        self._tools: list[dict] = []
+        self._tool_ids: list[str] = []
         self._client: Optional[AsyncOpenAI] = None
         self._sessions: Optional[AiSessionStore] = None
 
@@ -116,13 +97,9 @@ class AiCommand(BaseCommand):
             self._model = model
             enable_tools: bool = self.get_config_value(_SECTION, "enable_tools", fallback=False, value_type="bool")
             if enable_tools:
-                raw_tools: str = self.get_config_value(_SECTION, "tools", fallback="web_search")
-                for name in (t.strip() for t in raw_tools.split(",") if t.strip()):
-                    schema = _BUILTIN_TOOL_SCHEMAS.get(name)
-                    if schema:
-                        self._tools.append(schema)
-                    else:
-                        self.logger.warning("AI: unknown tool '%s' — skipping (known: %s)", name, list(_BUILTIN_TOOL_SCHEMAS))
+                # OWUI tool IDs — find them at GET /api/v1/tools in your Open WebUI instance
+                raw_ids: str = self.get_config_value(_SECTION, "tool_ids", fallback="")
+                self._tool_ids = [t.strip() for t in raw_ids.split(",") if t.strip()]
             db_path = str(self.bot.db_manager.db_path)
             self._sessions = AiSessionStore(db_path, max_history=max_history, expire_after=expire_after)
             # Clean up stale sessions from previous runs
@@ -174,7 +151,7 @@ class AiCommand(BaseCommand):
         llm_messages.extend(history)
         llm_messages.append({"role": "user", "content": body})
 
-        # Call the LLM
+        # Call OWUI — tool execution (SearXNG etc.) is handled server-side via tool_ids
         try:
             create_kwargs: dict = {
                 "model": self._model,
@@ -182,9 +159,8 @@ class AiCommand(BaseCommand):
                 "temperature": 0.3,
                 "max_tokens": 4096,
             }
-            if self._tools:
-                create_kwargs["tools"] = self._tools
-                create_kwargs["tool_choice"] = "auto"
+            if self._tool_ids:
+                create_kwargs["extra_body"] = {"tool_ids": self._tool_ids}
             resp = await self._client.chat.completions.create(**create_kwargs)
             resp_text = _THINK_RE.sub("", resp.choices[0].message.content or "").strip()
         except (APIError, APITimeoutError, Exception) as e:

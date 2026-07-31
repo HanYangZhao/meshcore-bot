@@ -1463,8 +1463,8 @@ expire_after = 86400
 # aliases = comma-separated extra trigger words, e.g.: aliases = llm, ask
 # Pass tool schemas to the LLM backend (requires OpenAI function-calling support, e.g. Open WebUI)
 # enable_tools = false
-# Comma-separated list of built-in tool names to enable: web_search, weather
-# tools = web_search
+# Comma-separated Open WebUI tool IDs to pass via extra_body (find them at GET /api/v1/tools)
+# tool_ids = abc123, def456
 
 ####################################################################################################
 #                                                                                                  #
