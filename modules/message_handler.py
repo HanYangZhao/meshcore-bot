@@ -3303,11 +3303,21 @@ class MessageHandler:
                 command_id = f"keyword_{keyword}_{message.sender_id}_{int(time.time())}"
 
                 try:
-                    success = await self.bot.command_manager.send_response(
-                        message,
-                        response,
-                        command_id=command_id,
-                    )
+                    if keyword == "help":
+                        max_length = self.bot.command_manager.get_max_message_length(message)
+                        chunks = self.bot.command_manager.split_text_into_chunks(response, max_length)
+                        success = await self.bot.command_manager.send_response_chunked(
+                            message,
+                            chunks,
+                            skip_user_rate_limit_first=False,
+                            command_id=command_id,
+                        )
+                    else:
+                        success = await self.bot.command_manager.send_response(
+                            message,
+                            response,
+                            command_id=command_id,
+                        )
 
                     if not success:
                         self.logger.warning(

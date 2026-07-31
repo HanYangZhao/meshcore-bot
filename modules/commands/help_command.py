@@ -201,6 +201,8 @@ class HelpCommand(BaseCommand):
 
             # Query the database for command usage statistics
             command_counts = defaultdict(int)
+            for primary_name in primary_names:
+                command_counts[primary_name] = 0
             try:
                 with self.bot.db_manager.connection() as conn:
                     cursor = conn.cursor()
@@ -254,7 +256,8 @@ class HelpCommand(BaseCommand):
                     primary_name = self.bot.command_manager.commands[cmd_name].name if hasattr(self.bot.command_manager.commands[cmd_name], 'name') else cmd_name
                     command_counts[primary_name] = 0
 
-            # If we have stats, sort by count descending, otherwise use all commands
+            # Sort by count descending, then name. Every loaded command is seeded
+            # with zero so commands without historical usage remain visible.
             if command_counts:
                 # Sort by count descending, then by name for consistency
                 sorted_commands = sorted(

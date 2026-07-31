@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from modules.command_manager import CommandManager
 from modules.commands.help_command import HelpCommand
 from tests.conftest import mock_message
 
@@ -311,6 +312,25 @@ class TestGetGeneralHelp:
         # Our mock translator returns keys — so should contain 'commands.help.general'
         assert "commands.help" in result
 
+    def test_lists_loaded_commands_instead_of_configured_help_template(self):
+        bot = _make_bot()
+        bot.config.set("Keywords", "help", "Outdated command list")
+        mock_ping = MagicMock()
+        mock_ping.name = "ping"
+        mock_ai = MagicMock()
+        mock_ai.name = "ai"
+        bot.command_manager.commands = {"ping": mock_ping, "ai": mock_ai}
+        help_command = HelpCommand(bot)
+        bot.command_manager.commands["help"] = help_command
+        command_manager = object.__new__(CommandManager)
+        command_manager.commands = bot.command_manager.commands
+
+        result = command_manager.get_general_help()
+
+        assert "ping" in result
+        assert "ai" in result
+        assert "Outdated command list" not in result
+
 
 class TestGetAvailableCommandsListFiltered:
     """Tests for channel-filtered command listing (line 185)."""
@@ -480,6 +500,42 @@ class TestGetAvailableCommandsList:
         cmd = HelpCommand(bot)
         result = cmd.get_available_commands_list()
         assert "ping" in result
+
+    def test_with_stats_table_includes_never_used_commands(self):
+        from contextlib import contextmanager
+
+        bot = _make_bot()
+        conn = _create_tracked_connection()
+        conn.execute("CREATE TABLE command_stats (command_name TEXT)")
+        conn.execute("INSERT INTO command_stats VALUES ('ping')")
+        conn.commit()
+
+        db = MagicMock()
+
+        @contextmanager
+        def _conn_ctx():
+            yield conn
+
+        db.connection = _conn_ctx
+        bot.db_manager = db
+        mock_ping = MagicMock()
+        mock_ping.name = "ping"
+        mock_ai = MagicMock()
+        mock_ai.name = "ai"
+        bot.command_manager.commands = {"ping": mock_ping, "ai": mock_ai}
+
+        result = HelpCommand(bot).get_available_commands_list()
+
+        assert "ping" in result
+        assert "ai" in result
+
+
+class TestSplitTextIntoChunks:
+    def test_respects_utf8_byte_limit(self):
+        chunks = CommandManager.split_text_into_chunks("hello café café", 7)
+
+        assert all(len(chunk.encode("utf-8")) <= 7 for chunk in chunks)
+        assert " ".join(chunks) == "hello café café"
 
     def test_db_exception_falls_back_gracefully(self):
         """If DB raises, falls back to sorted command names."""
