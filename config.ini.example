@@ -307,6 +307,18 @@ admin_pubkeys =
 # channelpause: DM-only; channelpause / channelresume — pause or resume bot responses on channels (not persisted)
 admin_commands = repeater,webviewer,reload,channelpause
 
+[Home_Assistant]
+# Home Assistant REST API integration — provides the 'ha get' command (admin-only)
+enabled = false
+# Base URL of your HA instance (no trailing slash)
+url = http://homeassistant.local:8123
+# Long-Lived Access Token from HA Profile > Security
+token = 
+# Comma-separated entity IDs returned by 'ha get' with no argument
+entities = sensor.living_room_temp, light.kitchen
+# Set to false to allow any mesh user to run 'ha get' (not recommended for security-sensitive entities)
+admin_only = true
+
 [Plugin_Overrides]
 # Plugin Overrides - Use alternative plugin implementations
 # Format: command_name = alternative_file_name
