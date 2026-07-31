@@ -1465,6 +1465,8 @@ expire_after = 86400
 # Direct SearXNG integration — results are injected into the prompt before the LLM call
 # searxng_url = https://searxng:8080
 # searxng_results = 3
+# Fetch actual page content from result URLs for richer data (stocks, weather, etc.); set false for snippets-only (faster)
+# searxng_fetch_content = true
 
 ####################################################################################################
 #                                                                                                  #

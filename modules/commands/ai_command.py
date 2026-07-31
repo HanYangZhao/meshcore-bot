@@ -10,8 +10,10 @@ from typing import Any, Optional
 import requests
 from openai import APIError, APITimeoutError, AsyncOpenAI
 
-# Strip <think>...</think> blocks produced by reasoning models (Qwen3, DeepSeek-R1, etc.)
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+# Strip HTML tags and collapse whitespace for page content extraction
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
 
 from ..ai_session_store import AiSessionStore
 from ..models import MeshMessage
@@ -100,6 +102,7 @@ class AiCommand(BaseCommand):
             self._model = model
             self._searxng_url = self.get_config_value(_SECTION, "searxng_url", fallback="").rstrip("/")
             self._searxng_results = self.get_config_value(_SECTION, "searxng_results", fallback=3, value_type="int")
+            self._searxng_fetch = self.get_config_value(_SECTION, "searxng_fetch_content", fallback=True, value_type="bool")
             db_path = str(self.bot.db_manager.db_path)
             self._sessions = AiSessionStore(db_path, max_history=max_history, expire_after=expire_after)
             # Clean up stale sessions from previous runs
@@ -189,7 +192,7 @@ class AiCommand(BaseCommand):
         return await self.send_response_chunked(message, chunks)
 
     async def _search_web(self, query: str) -> str:
-        """Query SearXNG and return top results formatted for LLM context injection."""
+        """Query SearXNG; optionally fetch page bodies for richer context."""
         try:
             resp = await asyncio.to_thread(
                 requests.get,
@@ -200,15 +203,38 @@ class AiCommand(BaseCommand):
             if not resp.ok:
                 self.logger.warning("AI: SearXNG returned %s", resp.status_code)
                 return ""
-            results = resp.json().get("results", "")[:self._searxng_results]
+            results = resp.json().get("results", [])[:self._searxng_results]
             if not results:
                 return ""
             lines = []
             for i, r in enumerate(results, 1):
                 title = r.get("title", "")
-                snippet = (r.get("content") or "")[:200].strip()
-                lines.append(f"{i}. {title}: {snippet}")
+                url = r.get("url", "")
+                if self._searxng_fetch and url:
+                    body = await self._fetch_page(url)
+                else:
+                    body = (r.get("content") or "")[:300].strip()
+                lines.append(f"{i}. {title}: {body}")
             return "Web search results:\n" + "\n".join(lines)
         except Exception as e:
             self.logger.warning("AI: SearXNG search failed: %s", e)
+            return ""
+
+    async def _fetch_page(self, url: str) -> str:
+        """Fetch a URL and return plain text (first 500 chars), stripping HTML."""
+        try:
+            resp = await asyncio.to_thread(
+                requests.get,
+                url,
+                timeout=5,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if not resp.ok:
+                return ""
+            # Remove script/style blocks then strip all tags
+            text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", resp.text, flags=re.DOTALL | re.IGNORECASE)
+            text = _TAG_RE.sub(" ", text)
+            text = _WS_RE.sub(" ", text).strip()
+            return text[:500]
+        except Exception:
             return ""
