@@ -1154,15 +1154,6 @@ class MessageHandler:
                                 }
                                 await self._process_advertisement_packet(decoded_packet, signal_info)
 
-                            # Firmware that doesn't fire MESSAGES_WAITING events won't
-                            # trigger auto-fetch; pull the message manually when we see it.
-                            elif routing_info["payload_type"] == "TXT_MSG":
-                                if hasattr(self.bot, "meshcore") and self.bot.meshcore:
-                                    try:
-                                        asyncio.ensure_future(self.bot.meshcore.commands.get_msg())
-                                    except Exception:
-                                        pass
-
                     # Prefer library-provided scope fields (already parsed by meshcore-py).
                     # The library's parsePacketPayload populates these directly from the
                     # inner MeshCore packet, avoiding any raw_hex prefix/offset issues.

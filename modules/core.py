@@ -345,6 +345,7 @@ class MeshCoreBot:
         # Idempotent async shutdown (see stop()); lock created when event loop is available
         self._shutdown_lock: asyncio.Lock | None = None
         self._shutdown_complete = False
+        self._message_poll_task: asyncio.Task[None] | None = None
 
         # Service plugin restart state (name -> timestamp of last failed restart)
         self._service_restart_failures: dict[str, float] = {}
@@ -1252,6 +1253,7 @@ long_jokes = false
             old_meshcore = self.meshcore
             self.meshcore = None
             self.connected = False
+            await self._stop_message_poller()
             if old_meshcore is not None:
                 try:
                     await asyncio.wait_for(old_meshcore.disconnect(), timeout=5.0)
@@ -1378,6 +1380,7 @@ long_jokes = false
         """Disconnect from radio. Called by scheduler via operation queue."""
         import asyncio
         try:
+            await self._stop_message_poller()
             if self.meshcore:
                 try:
                     await asyncio.wait_for(self.meshcore.disconnect(), timeout=10)
@@ -1395,6 +1398,7 @@ long_jokes = false
         """Send firmware reboot command, disconnect, wait for reboot, then reconnect."""
         import asyncio
         try:
+            await self._stop_message_poller()
             if self.meshcore and self.meshcore.is_connected:
                 self.logger.info("Sending firmware reboot command")
                 try:
@@ -1421,6 +1425,7 @@ long_jokes = false
         """Disconnect then reconnect. Called by scheduler for connect ops."""
         import asyncio
         try:
+            await self._stop_message_poller()
             if self.meshcore:
                 try:
                     await asyncio.wait_for(self.meshcore.disconnect(), timeout=10)
@@ -1796,8 +1801,7 @@ long_jokes = false
         # Note: Debug mode commands are not available in current meshcore-cli version
         # The meshcore library handles debug output automatically when needed
 
-        # Start auto message fetching
-        await self.meshcore.start_auto_message_fetching()
+        self._start_message_poller()
 
         # Delay NEW_CONTACT subscription to ensure device is fully ready
         self.logger.info("Delaying NEW_CONTACT subscription to ensure device readiness...")
@@ -1808,6 +1812,45 @@ long_jokes = false
         self.logger.info("NEW_CONTACT subscription active - ready to receive new contact events")
 
         self.logger.info("Message handlers setup complete")
+
+    def _start_message_poller(self) -> None:
+        """Poll the device inbox when firmware omits MESSAGES_WAITING events."""
+        if self._message_poll_task and not self._message_poll_task.done():
+            self._message_poll_task.cancel()
+
+        connection = self.meshcore
+
+        async def poll() -> None:
+            while (
+                self.connected
+                and self.meshcore is connection
+                and connection is not None
+                and connection.is_connected
+                and not self._shutdown_event.is_set()
+            ):
+                try:
+                    result = await connection.commands.get_msg(timeout=2.0)
+                    if result.type == EventType.ERROR:
+                        self.logger.debug("Message inbox poll failed: %s", result.payload)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    self.logger.warning("Message inbox poll failed: %s", e)
+                await asyncio.sleep(0.5)
+
+        self._message_poll_task = asyncio.create_task(poll())
+        self.logger.info("Message inbox polling started")
+
+    async def _stop_message_poller(self) -> None:
+        """Cancel and await the inbox poller before replacing its connection."""
+        task = self._message_poll_task
+        self._message_poll_task = None
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     async def start(self) -> None:
         """Start the bot.
@@ -2051,6 +2094,7 @@ long_jokes = false
             self._shutdown_event.set()
             self.connected = False
             self._update_radio_connected_metadata(False)
+            await self._stop_message_poller()
 
             # Shutdown mesh graph first to flush pending writes
             if hasattr(self, 'mesh_graph') and self.mesh_graph:
