@@ -90,7 +90,6 @@ class AiCommand(BaseCommand):
         custom_prompt: Optional[str] = self.get_config_value(_SECTION, "system_prompt", fallback=None)
         self._system_prompt: str = custom_prompt if custom_prompt else _DEFAULT_SYSTEM_PROMPT
 
-        self._tool_ids: list[str] = []
         self._searxng_url: str = ""
         self._searxng_results: int = 3
         self._client: Optional[AsyncOpenAI] = None
@@ -99,11 +98,6 @@ class AiCommand(BaseCommand):
         if self._enabled:
             self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=float(timeout))
             self._model = model
-            enable_tools: bool = self.get_config_value(_SECTION, "enable_tools", fallback=False, value_type="bool")
-            if enable_tools:
-                # OWUI tool IDs — find them at GET /api/v1/tools in your Open WebUI instance
-                raw_ids: str = self.get_config_value(_SECTION, "tool_ids", fallback="")
-                self._tool_ids = [t.strip() for t in raw_ids.split(",") if t.strip()]
             self._searxng_url = self.get_config_value(_SECTION, "searxng_url", fallback="").rstrip("/")
             self._searxng_results = self.get_config_value(_SECTION, "searxng_results", fallback=3, value_type="int")
             db_path = str(self.bot.db_manager.db_path)
@@ -165,7 +159,7 @@ class AiCommand(BaseCommand):
 
         llm_messages.append({"role": "user", "content": user_content})
 
-        # Call OWUI — tool execution (SearXNG etc.) is handled server-side via tool_ids
+        # Call the LLM
         try:
             create_kwargs: dict = {
                 "model": self._model,
@@ -173,8 +167,6 @@ class AiCommand(BaseCommand):
                 "temperature": 0.3,
                 "max_tokens": 4096,
             }
-            if self._tool_ids:
-                create_kwargs["extra_body"] = {"tool_ids": self._tool_ids}
             resp = await self._client.chat.completions.create(**create_kwargs)
             resp_text = _THINK_RE.sub("", resp.choices[0].message.content or "").strip()
         except (APIError, APITimeoutError, Exception) as e:
