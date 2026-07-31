@@ -1461,6 +1461,10 @@ expire_after = 86400
 # Restrict to specific channels (leave unset to allow all monitored channels and DMs)
 # channels =
 # aliases = comma-separated extra trigger words, e.g.: aliases = llm, ask
+# Pass tool schemas to the LLM backend (requires OpenAI function-calling support, e.g. Open WebUI)
+# enable_tools = false
+# Comma-separated list of built-in tool names to enable: web_search, weather
+# tools = web_search
 
 ####################################################################################################
 #                                                                                                  #

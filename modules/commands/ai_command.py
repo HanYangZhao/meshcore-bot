@@ -29,6 +29,25 @@ _DEFAULT_SYSTEM_PROMPT = (
 
 _SECTION = "AI_Command"
 
+# OpenAI-format schemas for common Open WebUI server-side tools.
+# OWUI matches function names to its registered tool functions and executes them server-side.
+_BUILTIN_TOOL_SCHEMAS: dict[str, dict] = {
+    "web_search": {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for current information, news, or real-time data.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query"}
+                },
+                "required": ["query"],
+            },
+        },
+    }
+}
+
 
 def _split_chunks(text: str, max_len: int) -> list[str]:
     """Split text at word boundaries into chunks of at most max_len bytes (UTF-8)."""
@@ -88,12 +107,22 @@ class AiCommand(BaseCommand):
         custom_prompt: Optional[str] = self.get_config_value(_SECTION, "system_prompt", fallback=None)
         self._system_prompt: str = custom_prompt if custom_prompt else _DEFAULT_SYSTEM_PROMPT
 
+        self._tools: list[dict] = []
         self._client: Optional[AsyncOpenAI] = None
         self._sessions: Optional[AiSessionStore] = None
 
         if self._enabled:
             self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=float(timeout))
             self._model = model
+            enable_tools: bool = self.get_config_value(_SECTION, "enable_tools", fallback=False, value_type="bool")
+            if enable_tools:
+                raw_tools: str = self.get_config_value(_SECTION, "tools", fallback="web_search")
+                for name in (t.strip() for t in raw_tools.split(",") if t.strip()):
+                    schema = _BUILTIN_TOOL_SCHEMAS.get(name)
+                    if schema:
+                        self._tools.append(schema)
+                    else:
+                        self.logger.warning("AI: unknown tool '%s' — skipping (known: %s)", name, list(_BUILTIN_TOOL_SCHEMAS))
             db_path = str(self.bot.db_manager.db_path)
             self._sessions = AiSessionStore(db_path, max_history=max_history, expire_after=expire_after)
             # Clean up stale sessions from previous runs
@@ -147,12 +176,16 @@ class AiCommand(BaseCommand):
 
         # Call the LLM
         try:
-            resp = await self._client.chat.completions.create(
-                model=self._model,
-                messages=llm_messages,
-                temperature=0.3,
-                max_tokens=4096,
-            )
+            create_kwargs: dict = {
+                "model": self._model,
+                "messages": llm_messages,
+                "temperature": 0.3,
+                "max_tokens": 4096,
+            }
+            if self._tools:
+                create_kwargs["tools"] = self._tools
+                create_kwargs["tool_choice"] = "auto"
+            resp = await self._client.chat.completions.create(**create_kwargs)
             resp_text = _THINK_RE.sub("", resp.choices[0].message.content or "").strip()
         except (APIError, APITimeoutError, Exception) as e:
             self.logger.error("AI command error for %s: %s", message.sender_id, e)
