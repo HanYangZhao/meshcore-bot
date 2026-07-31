@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any, Optional
 
+import requests
 from openai import APIError, APITimeoutError, AsyncOpenAI
 
 # Strip <think>...</think> blocks produced by reasoning models (Qwen3, DeepSeek-R1, etc.)
@@ -89,6 +91,8 @@ class AiCommand(BaseCommand):
         self._system_prompt: str = custom_prompt if custom_prompt else _DEFAULT_SYSTEM_PROMPT
 
         self._tool_ids: list[str] = []
+        self._searxng_url: str = ""
+        self._searxng_results: int = 3
         self._client: Optional[AsyncOpenAI] = None
         self._sessions: Optional[AiSessionStore] = None
 
@@ -100,6 +104,8 @@ class AiCommand(BaseCommand):
                 # OWUI tool IDs — find them at GET /api/v1/tools in your Open WebUI instance
                 raw_ids: str = self.get_config_value(_SECTION, "tool_ids", fallback="")
                 self._tool_ids = [t.strip() for t in raw_ids.split(",") if t.strip()]
+            self._searxng_url = self.get_config_value(_SECTION, "searxng_url", fallback="").rstrip("/")
+            self._searxng_results = self.get_config_value(_SECTION, "searxng_results", fallback=3, value_type="int")
             db_path = str(self.bot.db_manager.db_path)
             self._sessions = AiSessionStore(db_path, max_history=max_history, expire_after=expire_after)
             # Clean up stale sessions from previous runs
@@ -149,7 +155,15 @@ class AiCommand(BaseCommand):
 
         llm_messages = [{"role": "system", "content": self._system_prompt}]
         llm_messages.extend(history)
-        llm_messages.append({"role": "user", "content": body})
+
+        # Prepend SearXNG results as context if configured
+        user_content = body
+        if self._searxng_url:
+            search_context = await self._search_web(body)
+            if search_context:
+                user_content = f"{search_context}\n\nUsing the search results above, answer: {body}"
+
+        llm_messages.append({"role": "user", "content": user_content})
 
         # Call OWUI — tool execution (SearXNG etc.) is handled server-side via tool_ids
         try:
@@ -181,3 +195,28 @@ class AiCommand(BaseCommand):
         if not chunks:
             return True
         return await self.send_response_chunked(message, chunks)
+
+    async def _search_web(self, query: str) -> str:
+        """Query SearXNG and return top results formatted for LLM context injection."""
+        try:
+            resp = await asyncio.to_thread(
+                requests.get,
+                f"{self._searxng_url}/search",
+                params={"q": query, "format": "json"},
+                timeout=5,
+            )
+            if not resp.ok:
+                self.logger.warning("AI: SearXNG returned %s", resp.status_code)
+                return ""
+            results = resp.json().get("results", "")[:self._searxng_results]
+            if not results:
+                return ""
+            lines = []
+            for i, r in enumerate(results, 1):
+                title = r.get("title", "")
+                snippet = (r.get("content") or "")[:200].strip()
+                lines.append(f"{i}. {title}: {snippet}")
+            return "Web search results:\n" + "\n".join(lines)
+        except Exception as e:
+            self.logger.warning("AI: SearXNG search failed: %s", e)
+            return ""

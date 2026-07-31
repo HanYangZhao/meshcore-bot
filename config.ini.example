@@ -1465,6 +1465,9 @@ expire_after = 86400
 # enable_tools = false
 # Comma-separated Open WebUI tool IDs to pass via extra_body (find them at GET /api/v1/tools)
 # tool_ids = abc123, def456
+# Direct SearXNG integration — results are injected into the prompt before the LLM call
+# searxng_url = https://searxng:8080
+# searxng_results = 3
 
 ####################################################################################################
 #                                                                                                  #
